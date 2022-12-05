@@ -582,7 +582,7 @@ def work_func(bv, func):
 
 PluginCommand.register(
     "Override printf call types",
-    "Properly types printfy calls by parsing format strings",
+    "Properly types printf-family calls by parsing format strings",
     work
 )
 
