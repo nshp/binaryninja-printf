@@ -22,8 +22,7 @@
         "Linux": "no special instructions, package manager is recommended",
         "Windows": "no special instructions, package manager is recommended"
     },
-    "dependencies": {
-    },
+    "dependencies": {},
     "version": "1.0",
     "author": "Nick Shipp",
     "minimumbinaryninjaversion": 3814
