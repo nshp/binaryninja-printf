@@ -1,19 +1,44 @@
-# Binary Ninja Printf Analysis
+# Format String Analysis (v1.0)
+Author: **Nick Shipp**
 
-Plugin to update the printf family of functions:
+_Script to automatically annotate variadic printf functions_
 
- - printf
- - wprintf
- - fprintf
- - dprintf
- - sprintf
- - asprintf
- - snprintf
- - __printf_chk
- - __fprintf_chk
- - __sprintf_chk
- - __snprintf_chk
+## Description:
 
- Can parse existing printf family of functions using the `Override printf call types` command-palette or plugin menu action. Uses the `set_call_type_adjustment` API along with a basic format string parser to appropriate type each location where one of those APIs is called.
+Parses format strings and uses them to apply the correct type and number of arguments to each call site. Supports user-defined printf functions, e.g. for statically linked binaries. Also supports user-defined format specifiers using user types for non-standard printf implementations.
 
- Additionally, supports the ability to add additional custom printf-like functions and add new format specifiers. To add new specifiers, use the `Add printf extension` menu/action and to add new functions use the `Add printf-like function` menu/action.
+
+## Installation Instructions
+
+### Darwin
+
+no special instructions, package manager is recommended
+
+### Linux
+
+no special instructions, package manager is recommended
+
+### Windows
+
+no special instructions, package manager is recommended
+
+## Minimum Version
+
+This plugin requires the following minimum version of Binary Ninja:
+
+* 3814
+
+
+
+## Required Dependencies
+
+The following dependencies are required for this plugin:
+
+
+
+## License
+
+This plugin is released under a MIT license.
+## Metadata Version
+
+2
