@@ -357,7 +357,7 @@ class PrintfTyperBase:
                                           variable_arguments=False,
                                           calling_convention=variadic_type.calling_convention,
                                           stack_adjust=variadic_type.stack_adjustment or None)
-            # log_info("{:#x}: format string {!r}: explicit type {!r}".format(ref.address, fmt, explicit_type))
+            log_debug("{:#x}: format string {!r}: explicit type {!r}".format(ref.address, fmt, explicit_type))
             func.set_call_type_adjustment(ref.address, explicit_type)
 
 class PrintfTyperSingle(BackgroundTaskThread):
@@ -406,25 +406,11 @@ class PrintfTyper(BackgroundTaskThread):
 
         for decl, positions in printf_functions.items():
             decl_type, name = bv.parse_type_string(decl)
-            syms = bv.symbols.get(str(name))
-            if syms is None:
-                continue
-            elif hasattr(syms, '__getitem__'):
-                # Sometimes returns a list
-                syms = list(filter(lambda s: s.type in {SymbolType.ImportedFunctionSymbol, SymbolType.FunctionSymbol}, syms))
-                if len(syms) != 1:
-                    log_warn('{} functions with name {!r}'.format(len(syms), name))
-                    continue
-                symbol = syms[0]
-            else:
-                symbol = syms
-
-            func = bv.get_function_at(symbol.address)
-            if func is None:
-                continue
-
-            func.set_auto_type(decl_type)
-            symbols.append((symbol, decl_type, positions))
+            for symbol in bv.get_symbols_by_name(str(name)):
+                func = bv.get_function_at(symbol.address)
+                if func:
+                    func.set_auto_type(decl_type)
+                    symbols.append((symbol, decl_type, positions))
 
         self.progress = ""
         bv.update_analysis_and_wait()
