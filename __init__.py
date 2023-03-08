@@ -259,6 +259,13 @@ def define_cstring(bv, address):
     bv.define_data_var(address, Type.array(Type.char(), nul + 1))
     return data[:nul]
 
+# Add TAILCALL ops here once "override call type" works on them
+LLIL_CALLS = {LowLevelILOperation.LLIL_CALL,
+              LowLevelILOperation.LLIL_CALL_STACK_ADJUST}
+
+MLIL_CALLS = {MediumLevelILOperation.MLIL_CALL,
+              MediumLevelILOperation.MLIL_TAILCALL}
+
 class PrintfTyperBase:
     def __init__(self, view):
         self.view = view
@@ -269,7 +276,9 @@ class PrintfTyperBase:
 
     def handle_function(self, symbol, variadic_type, fmt_pos, arg_pos, thread=None):
         bv = self.view
-        calls = list(bv.get_callers(symbol.address))
+        # Using code refs instead of callers here to handle calls through named
+        # function pointers
+        calls = list(bv.get_code_refs(symbol.address))
         ncalls = len(calls)
         it = 1
 
@@ -280,22 +289,48 @@ class PrintfTyperBase:
                     break
                 thread.progress = "processing: {} ({}/{})".format(symbol.name, it, ncalls)
                 it += 1
+
+            mlil = ref.mlil
+            mlil_index = None
+            if mlil is None:
+                # If there is no mlil at this address, we'll look at the LLIL
+                # and scan forward until we see a call that seems to match up
+                llil_instr = ref.llil
+                llil = ref.function.llil
+                if llil_instr is None:
+                    log_info(f"no llil for {ref.address:#x}")
+                    continue
+                for idx in range(llil_instr.instr_index, len(llil)):
+                    if llil[idx].operation in LLIL_CALLS and llil[idx].dest.value.value == symbol.address:
+                        call_address = llil[idx].address
+                        mlil_index = ref.function.mlil.get_instruction_start(call_address)
+                        break
+                    if idx > llil_instr.instr_index + 128:
+                        # Don't scan forward forever...
+                        break
+            else:
+                call_address = ref.address
+                mlil_index = mlil.instr_index
+
             func = ref.function
             mlil = func.medium_level_il
-            mlil_index = mlil.get_instruction_start(ref.address)
             if mlil_index is None:
+                log_info(f"no mlil index for {ref.address:#x}")
                 continue
 
             il = mlil[mlil_index]
-            call_expr = find_expr(il, {MediumLevelILOperation.MLIL_CALL,
-                                       MediumLevelILOperation.MLIL_TAILCALL})
+            call_expr = find_expr(il, MLIL_CALLS)
             if call_expr is None:
-                log_warn("Cannot find call expr for ref {:#x}".format(ref.address))
+                log_debug("Cannot find call expr for ref {:#x}".format(call_address))
+                continue
+
+            if call_expr.dest.constant != symbol.address:
+                log_warn("{:#x}: Call expression dest {!r} does not match {!r}".format(call_address, call_expr.dest, symbol))
                 continue
 
             call_args = call_expr.operands[2]
             if len(call_args) <= fmt_pos:
-                log_warn("Call at {:#x} does not respect function type".format(ref.address))
+                log_warn("Call at {:#x} does not respect function type".format(call_address))
                 continue
 
             fmt_arg = call_args[fmt_pos]
@@ -304,13 +339,13 @@ class PrintfTyperBase:
                 fmt_ptr = fmt_arg_value.value
                 fmt = define_cstring(bv, fmt_ptr)
                 if fmt is None:
-                    log_warn("{:#x}: Bad format string at {:#x}".format(ref.address, fmt_ptr))
+                    log_warn("{:#x}: Bad format string at {:#x}".format(call_address, fmt_ptr))
                     continue
 
                 fmt_type_strs = format_types(self.local_extns, fmt)
                 # print(fmt, fmt_type_strs)
                 if fmt_type_strs is None:
-                    log_warn("{:#x}: Failed to parse format string {!r}".format(ref.address, fmt))
+                    log_warn("{:#x}: Failed to parse format string {!r}".format(call_address, fmt))
                     continue
 
 
@@ -319,11 +354,11 @@ class PrintfTyperBase:
                 for fmt_ptr in fmt_arg_value.values:
                     fmt = define_cstring(bv, fmt_ptr)
                     if fmt is None:
-                        log_warn("{:#x}: Bad format string at {:#x}".format(ref.address, fmt_ptr))
+                        log_warn("{:#x}: Bad format string at {:#x}".format(call_address, fmt_ptr))
                         break
                     fmt_type_strs = format_types(self.local_extns, fmt)
                     if fmt_type_strs is None:
-                        log_warn("{:#x}: Failed to parse format string {!r}".format(ref.address, fmt))
+                        log_warn("{:#x}: Failed to parse format string {!r}".format(call_address, fmt))
                         fmt = None
                         break
                     fmts.update((tuple(fmt_type_strs),))
@@ -331,17 +366,17 @@ class PrintfTyperBase:
                 if fmt is None:
                     continue
                 elif not fmts:
-                    log_warn("{:#x}: Unable to resolve format string from {!r}".format(ref.address, fmt_arg))
+                    log_warn("{:#x}: Unable to resolve format string from {!r}".format(call_address, fmt_arg))
                     continue
                 elif len(fmts) > 1:
-                    log_warn("{:#x}: Differing format types passed to one call: {!r}".format(ref.address, fmts))
+                    log_warn("{:#x}: Differing format types passed to one call: {!r}".format(call_address, fmts))
                     continue
 
                 # print(fmt, fmt_type_strs)
                 fmt_type_strs = fmts.pop()
 
             else:
-                log_warn("{:#x}: Ooh, format bug? {!r} ({!r}) is not const".format(ref.address, fmt_arg, fmt_arg_value))
+                log_warn("{:#x}: Ooh, format bug? {!r} ({!r}) is not const".format(call_address, fmt_arg, fmt_arg_value))
                 continue
 
             try:
@@ -357,8 +392,8 @@ class PrintfTyperBase:
                                           variable_arguments=False,
                                           calling_convention=variadic_type.calling_convention,
                                           stack_adjust=variadic_type.stack_adjustment or None)
-            log_debug("{:#x}: format string {!r}: explicit type {!r}".format(ref.address, fmt, explicit_type))
-            func.set_call_type_adjustment(ref.address, explicit_type)
+            log_debug("{:#x}: format string {!r}: explicit type {!r}".format(call_address, fmt, explicit_type))
+            func.set_call_type_adjustment(call_address, explicit_type)
 
 class PrintfTyperSingle(BackgroundTaskThread):
     def __init__(self, view, symbol, variadic_type, fmt_pos, arg_pos):
@@ -372,6 +407,7 @@ class PrintfTyperSingle(BackgroundTaskThread):
 
     def run(self):
         self.progress = "processing: {}".format(self.symbol.name)
+        log_debug(self.symbol.name)
         PrintfTyperBase(self.view).handle_function(self.symbol, self.variadic_type, self.fmt_pos, self.arg_pos, self)
 
     def update_analysis_and_handle(self):
@@ -407,9 +443,23 @@ class PrintfTyper(BackgroundTaskThread):
         for decl, positions in printf_functions.items():
             decl_type, name = bv.parse_type_string(decl)
             for symbol in bv.get_symbols_by_name(str(name)):
-                func = bv.get_function_at(symbol.address)
-                if func:
-                    func.set_auto_type(decl_type)
+                # Handle PLTs and local functions
+                if symbol.type == SymbolType.FunctionSymbol:
+                    func = bv.get_function_at(symbol.address)
+                    if func is None:
+                        continue
+                    func.set_user_type(decl_type)
+                    symbols.append((symbol, decl_type, positions))
+                # Handle GOT entries
+                elif symbol.type == SymbolType.ImportAddressSymbol:
+                    var = bv.get_data_var_at(symbol.address)
+                    if var is None:
+                        continue
+                    if var.type.type_class != TypeClass.PointerTypeClass:
+                        continue
+                    var.type = Type.pointer(bv.arch,
+                                            decl_type,
+                                            const=var.type.const)
                     symbols.append((symbol, decl_type, positions))
 
         self.progress = ""
