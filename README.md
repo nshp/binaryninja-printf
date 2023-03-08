@@ -1,4 +1,4 @@
-# Format String Analysis (v1.0)
+# Format String Analysis (v1.1)
 Author: **Nick Shipp**
 
 _Script to automatically annotate variadic printf functions_
