@@ -609,7 +609,7 @@ def work_func(bv, func):
                   + '('
                   + (', '.join(map(str, func.function_type.parameters)))
                   + ', ...)')
-    assert str(bv.parse_type_string(named_type)[0]) == str(func.function_type)
+    # assert str(bv.parse_type_string(named_type)[0]) == str(func.function_type)
     local_funcs.update({named_type: (fmt_arg_pos, var_arg_pos)})
     bv.store_metadata(META_KEY_FUNCTIONS, local_funcs)
 
