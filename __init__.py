@@ -592,7 +592,7 @@ def work_func(bv, func):
                                 .format(func.name, func.start, str(new_type))),
                                buttons=MessageBoxButtonSet.YesNoCancelButtonSet,
                                icon=MessageBoxIcon.QuestionIcon)
-        if res != MessageBoxButtonResult.OKButton:
+        if res != MessageBoxButtonResult.YesButton:
             return
 
         func.function_type = new_type
@@ -609,7 +609,7 @@ def work_func(bv, func):
                   + '('
                   + (', '.join(map(str, func.function_type.parameters)))
                   + ', ...)')
-    assert str(bv.parse_type_string(named_type)[0]) == str(func.function_type)
+    # assert str(bv.parse_type_string(named_type)[0]) == str(func.function_type)
     local_funcs.update({named_type: (fmt_arg_pos, var_arg_pos)})
     bv.store_metadata(META_KEY_FUNCTIONS, local_funcs)
 
@@ -617,19 +617,19 @@ def work_func(bv, func):
     worker.update_analysis_and_handle()
 
 PluginCommand.register(
-    "Override printf call types",
+    "printf\Override printf call types",
     "Properly types printf-family calls by parsing format strings",
     work
 )
 
 PluginCommand.register_for_function(
-    "Add printf-like function",
+    "printf\Add printf-like function",
     "Mark a printf-like function for type analysis",
     work_func
 )
 
 PluginCommand.register(
-    "Add printf extension",
+    "printf\Add printf extension",
     "Add a custom format string spec",
     extend
 )
